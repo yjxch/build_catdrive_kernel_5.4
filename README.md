@@ -17,4 +17,5 @@ Porting the patch from ![hanwckf](https://github.com/hanwckf/build-catdrive)
  };
 
 ```
-2. make 
+2. mkdir output  
+3. make 
