@@ -111,6 +111,7 @@
 
 &eth0 {
 	phy-mode = "sgmii";
+	mac-address = [4C 65 A8 11 D4 A5];
 	phy = <&phy0>;
 	status = "okay";
 };
