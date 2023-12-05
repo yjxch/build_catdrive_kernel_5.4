@@ -1,4 +1,4 @@
-KDIR := linux-5.4.21
+KDIR := linux-5.4.y
 KCFG := catdrive.config
 KVER = $(shell make -s kernel_version)
 
