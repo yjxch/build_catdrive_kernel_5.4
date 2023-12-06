@@ -4,7 +4,7 @@ Porting the patch from ![hanwckf](https://github.com/hanwckf/build-catdrive)
 
 ### require
 
-sudo apt install libncurses-dev flex bison libssl-dev git gcc-aarch64-linux-gnu
+sudo apt install libncurses-dev flex bison libssl-dev git gcc-aarch64-linux-gnu fakeroot build-essential ncurses-dev xz-utils libssl-dev bc flex libelf-dev bison
 
 ### steps  
 1. add the mac address for catdrive for your own, such as (4C:65:A8:00:00:00)  

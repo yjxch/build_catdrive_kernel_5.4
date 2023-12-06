@@ -67,7 +67,7 @@ extern int smb3_handle_read_data(struct TCP_Server_Info *server,
 				 struct mid_q_entry *mid);
 
 extern int open_shroot(unsigned int xid, struct cifs_tcon *tcon,
-			struct cifs_fid *pfid);
+		       struct cifs_sb_info *cifs_sb, struct cifs_fid *pfid);
 extern void close_shroot(struct cached_fid *cfid);
 extern void move_smb2_info_to_cifs(FILE_ALL_INFO *dst,
 				   struct smb2_file_all_info *src);
@@ -156,8 +156,6 @@ extern int SMB2_change_notify(const unsigned int xid, struct cifs_tcon *tcon,
 
 extern int SMB2_close(const unsigned int xid, struct cifs_tcon *tcon,
 		      u64 persistent_file_id, u64 volatile_file_id);
-extern int SMB2_close_flags(const unsigned int xid, struct cifs_tcon *tcon,
-			    u64 persistent_fid, u64 volatile_fid, int flags);
 extern int SMB2_close_init(struct cifs_tcon *tcon, struct smb_rqst *rqst,
 		      u64 persistent_file_id, u64 volatile_file_id);
 extern void SMB2_close_free(struct smb_rqst *rqst);

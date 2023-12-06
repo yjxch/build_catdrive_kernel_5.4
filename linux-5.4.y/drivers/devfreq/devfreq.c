@@ -319,7 +319,7 @@ static int devfreq_set_target(struct devfreq *devfreq, unsigned long new_freq,
 	devfreq->previous_freq = new_freq;
 
 	if (devfreq->suspend_freq)
-		devfreq->resume_freq = cur_freq;
+		devfreq->resume_freq = new_freq;
 
 	return err;
 }
@@ -595,6 +595,7 @@ static void devfreq_dev_release(struct device *dev)
 		devfreq->profile->exit(devfreq->dev.parent);
 
 	mutex_destroy(&devfreq->lock);
+	srcu_cleanup_notifier_head(&devfreq->transition_notifier_list);
 	kfree(devfreq);
 }
 
@@ -603,8 +604,7 @@ static void devfreq_dev_release(struct device *dev)
  * @dev:	the device to add devfreq feature.
  * @profile:	device-specific profile to run devfreq.
  * @governor_name:	name of the policy to choose frequency.
- * @data:	private data for the governor. The devfreq framework does not
- *		touch this value.
+ * @data:	devfreq driver pass to governors, governor should not change it.
  */
 struct devfreq *devfreq_add_device(struct device *dev,
 				   struct devfreq_dev_profile *profile,
@@ -788,8 +788,7 @@ static void devm_devfreq_dev_release(struct device *dev, void *res)
  * @dev:	the device to add devfreq feature.
  * @profile:	device-specific profile to run devfreq.
  * @governor_name:	name of the policy to choose frequency.
- * @data:	private data for the governor. The devfreq framework does not
- *		touch this value.
+ * @data:	 devfreq driver pass to governors, governor should not change it.
  *
  * This function manages automatically the memory of devfreq device using device
  * resource management and simplify the free operation for memory of devfreq
@@ -902,7 +901,9 @@ int devfreq_suspend_device(struct devfreq *devfreq)
 	}
 
 	if (devfreq->suspend_freq) {
+		mutex_lock(&devfreq->lock);
 		ret = devfreq_set_target(devfreq, devfreq->suspend_freq, 0);
+		mutex_unlock(&devfreq->lock);
 		if (ret)
 			return ret;
 	}
@@ -930,7 +931,9 @@ int devfreq_resume_device(struct devfreq *devfreq)
 		return 0;
 
 	if (devfreq->resume_freq) {
+		mutex_lock(&devfreq->lock);
 		ret = devfreq_set_target(devfreq, devfreq->resume_freq, 0);
+		mutex_unlock(&devfreq->lock);
 		if (ret)
 			return ret;
 	}

@@ -22,6 +22,11 @@
 #include <net/ip.h>
 #include "ar-internal.h"
 
+static void rxrpc_dummy_notify(struct sock *sk, struct rxrpc_call *call,
+			       unsigned long user_call_ID)
+{
+}
+
 /*
  * Preallocate a single service call, connection and peer and, if possible,
  * give them a user ID and attach the user's side of the ID to them.
@@ -202,6 +207,7 @@ void rxrpc_discard_prealloc(struct rxrpc_sock *rx)
 	tail = b->peer_backlog_tail;
 	while (CIRC_CNT(head, tail, size) > 0) {
 		struct rxrpc_peer *peer = b->peer_backlog[tail];
+		rxrpc_put_local(peer->local);
 		kfree(peer);
 		tail = (tail + 1) & (size - 1);
 	}
@@ -228,6 +234,8 @@ void rxrpc_discard_prealloc(struct rxrpc_sock *rx)
 		if (rx->discard_new_call) {
 			_debug("discard %lx", call->user_call_ID);
 			rx->discard_new_call(call, call->user_call_ID);
+			if (call->notify_rx)
+				call->notify_rx = rxrpc_dummy_notify;
 			rxrpc_put_call(call, rxrpc_call_put_kernel);
 		}
 		rxrpc_call_completed(call);
@@ -248,7 +256,7 @@ static void rxrpc_send_ping(struct rxrpc_call *call, struct sk_buff *skb)
 	struct rxrpc_skb_priv *sp = rxrpc_skb(skb);
 	ktime_t now = skb->tstamp;
 
-	if (call->peer->rtt_usage < 3 ||
+	if (call->peer->rtt_count < 3 ||
 	    ktime_before(ktime_add_ms(call->peer->rtt_last_req, 1000), now))
 		rxrpc_propose_ACK(call, RXRPC_ACK_PING, sp->hdr.serial,
 				  true, true,

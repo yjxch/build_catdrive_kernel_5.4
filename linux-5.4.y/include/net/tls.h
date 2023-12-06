@@ -157,6 +157,8 @@ struct tls_sw_context_tx {
 	struct tls_rec *open_rec;
 	struct list_head tx_list;
 	atomic_t encrypt_pending;
+	/* protect crypto_wait with encrypt_pending */
+	spinlock_t encrypt_compl_lock;
 	int async_notify;
 	int async_capable;
 
@@ -177,6 +179,8 @@ struct tls_sw_context_rx {
 	int async_capable;
 	bool decrypted;
 	atomic_t decrypt_pending;
+	/* protect crypto_wait with decrypt_pending*/
+	spinlock_t decrypt_compl_lock;
 	bool async_notify;
 };
 
@@ -217,6 +221,12 @@ enum tls_context_flags {
 	 * to be atomic.
 	 */
 	TLS_TX_SYNC_SCHED = 1,
+	/* tls_dev_del was called for the RX side, device state was released,
+	 * but tls_ctx->netdev might still be kept, because TX-side driver
+	 * resources might not be released yet. Used to prevent the second
+	 * tls_dev_del call in tls_device_down if it happens simultaneously.
+	 */
+	TLS_RX_DEV_CLOSED = 2,
 };
 
 struct cipher_context {
@@ -350,6 +360,7 @@ int tls_sk_query(struct sock *sk, int optname, char __user *optval,
 		int __user *optlen);
 int tls_sk_attach(struct sock *sk, int optname, char __user *optval,
 		  unsigned int optlen);
+void tls_err_abort(struct sock *sk, int err);
 
 int tls_set_sw_offload(struct sock *sk, struct tls_context *ctx, int tx);
 void tls_sw_strparser_arm(struct sock *sk, struct tls_context *ctx);
@@ -455,12 +466,6 @@ static inline bool tls_is_sk_tx_device_offloaded(struct sock *sk)
 #endif
 }
 
-static inline void tls_err_abort(struct sock *sk, int err)
-{
-	sk->sk_err = err;
-	sk->sk_error_report(sk);
-}
-
 static inline bool tls_bigint_increment(unsigned char *seq, int len)
 {
 	int i;
@@ -489,7 +494,7 @@ static inline void tls_advance_record_sn(struct sock *sk,
 					 struct cipher_context *ctx)
 {
 	if (tls_bigint_increment(ctx->rec_seq, prot->rec_seq_size))
-		tls_err_abort(sk, EBADMSG);
+		tls_err_abort(sk, -EBADMSG);
 
 	if (prot->version != TLS_1_3_VERSION)
 		tls_bigint_increment(ctx->iv + TLS_CIPHER_AES_GCM_128_SALT_SIZE,
@@ -584,6 +589,15 @@ static inline bool tls_sw_has_ctx_tx(const struct sock *sk)
 	if (!ctx)
 		return false;
 	return !!tls_sw_ctx_tx(ctx);
+}
+
+static inline bool tls_sw_has_ctx_rx(const struct sock *sk)
+{
+	struct tls_context *ctx = tls_get_ctx(sk);
+
+	if (!ctx)
+		return false;
+	return !!tls_sw_ctx_rx(ctx);
 }
 
 void tls_sw_write_space(struct sock *sk, struct tls_context *ctx);

@@ -361,6 +361,14 @@ static const struct dmi_system_id acpisleep_dmi_table[] __initconst = {
 		DMI_MATCH(DMI_PRODUCT_NAME, "80E3"),
 		},
 	},
+	{
+	.callback = init_nvs_save_s3,
+	.ident = "Lenovo G40-45",
+	.matches = {
+		DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+		DMI_MATCH(DMI_PRODUCT_NAME, "80E1"),
+		},
+	},
 	/*
 	 * ThinkPad X1 Tablet(2016) cannot do suspend-to-idle using
 	 * the Low Power S0 Idle firmware interface (see
@@ -372,6 +380,18 @@ static const struct dmi_system_id acpisleep_dmi_table[] __initconst = {
 	.matches = {
 		DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 		DMI_MATCH(DMI_PRODUCT_NAME, "20GGA00L00"),
+		},
+	},
+	/*
+	 * ASUS B1400CEAE hangs on resume from suspend (see
+	 * https://bugzilla.kernel.org/show_bug.cgi?id=215742).
+	 */
+	{
+	.callback = init_default_s3,
+	.ident = "ASUS B1400CEAE",
+	.matches = {
+		DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+		DMI_MATCH(DMI_PRODUCT_NAME, "ASUS EXPERTBOOK B1400CEAE"),
 		},
 	},
 	{},
@@ -977,16 +997,6 @@ static int acpi_s2idle_prepare_late(void)
 	return 0;
 }
 
-static void acpi_s2idle_sync(void)
-{
-	/*
-	 * The EC driver uses the system workqueue and an additional special
-	 * one, so those need to be flushed too.
-	 */
-	acpi_ec_flush_work();
-	acpi_os_wait_events_complete(); /* synchronize Notify handling */
-}
-
 static bool acpi_s2idle_wake(void)
 {
 	if (!acpi_sci_irq_valid())
@@ -1009,21 +1019,16 @@ static bool acpi_s2idle_wake(void)
 		if (acpi_any_fixed_event_status_set())
 			return true;
 
-		/*
-		 * If there are no EC events to process and at least one of the
-		 * other enabled GPEs is active, the wakeup is regarded as a
-		 * genuine one.
-		 *
-		 * Note that the checks below must be carried out in this order
-		 * to avoid returning prematurely due to a change of the EC GPE
-		 * status bit from unset to set between the checks with the
-		 * status bits of all the other GPEs unset.
-		 */
-		if (acpi_any_gpe_status_set() && !acpi_ec_dispatch_gpe())
+		/* Check wakeups from drivers sharing the SCI. */
+		if (acpi_check_wakeup_handlers())
+			return true;
+
+		/* Check non-EC GPE wakeups and dispatch the EC GPE. */
+		if (acpi_ec_dispatch_gpe())
 			return true;
 
 		/*
-		 * Cancel the wakeup and process all pending events in case
+		 * Cancel the SCI wakeup and process all pending events in case
 		 * there are any wakeup ones in there.
 		 *
 		 * Note that if any non-EC GPEs are active at this point, the
@@ -1031,8 +1036,7 @@ static bool acpi_s2idle_wake(void)
 		 * should be missed by canceling the wakeup here.
 		 */
 		pm_system_cancel_wakeup();
-
-		acpi_s2idle_sync();
+		acpi_os_wait_events_complete();
 
 		/*
 		 * The SCI is in the "suspended" state now and it cannot produce
@@ -1043,6 +1047,7 @@ static bool acpi_s2idle_wake(void)
 		if (pm_wakeup_pending())
 			return true;
 
+		pm_wakeup_clear(acpi_sci_irq);
 		rearm_wake_irq(acpi_sci_irq);
 	}
 
@@ -1065,7 +1070,8 @@ static void acpi_s2idle_restore(void)
 	 * of GPEs.
 	 */
 	acpi_os_wait_events_complete(); /* synchronize GPE processing */
-	acpi_s2idle_sync();
+	acpi_ec_flush_work(); /* flush the EC driver's workqueues */
+	acpi_os_wait_events_complete(); /* synchronize Notify handling */
 
 	s2idle_wakeup = false;
 

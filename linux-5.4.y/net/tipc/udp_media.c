@@ -161,9 +161,11 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 			 struct udp_bearer *ub, struct udp_media_addr *src,
 			 struct udp_media_addr *dst, struct dst_cache *cache)
 {
-	struct dst_entry *ndst = dst_cache_get(cache);
+	struct dst_entry *ndst;
 	int ttl, err = 0;
 
+	local_bh_disable();
+	ndst = dst_cache_get(cache);
 	if (dst->proto == htons(ETH_P_IP)) {
 		struct rtable *rt = (struct rtable *)ndst;
 
@@ -210,9 +212,11 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 					   src->port, dst->port, false);
 #endif
 	}
+	local_bh_enable();
 	return err;
 
 tx_error:
+	local_bh_enable();
 	kfree_skb(skb);
 	return err;
 }
@@ -798,6 +802,7 @@ static void cleanup_bearer(struct work_struct *work)
 		kfree_rcu(rcast, rcu);
 	}
 
+	atomic_dec(&tipc_net(sock_net(ub->ubsock->sk))->wq_count);
 	dst_cache_destroy(&ub->rcast.dst_cache);
 	udp_tunnel_sock_release(ub->ubsock);
 	synchronize_net();
@@ -818,6 +823,7 @@ static void tipc_udp_disable(struct tipc_bearer *b)
 	RCU_INIT_POINTER(ub->bearer, NULL);
 
 	/* sock_release need to be done outside of rtnl lock */
+	atomic_inc(&tipc_net(sock_net(ub->ubsock->sk))->wq_count);
 	INIT_WORK(&ub->work, cleanup_bearer);
 	schedule_work(&ub->work);
 }
