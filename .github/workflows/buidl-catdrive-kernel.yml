@@ -8,16 +8,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-
+        
       - name: Build
         run: |
-        sudo -E apt update
-        sudo -E apt install -y wget xz-utils make gcc flex bison dpkg-dev bc rsync kmod cpio libssl-dev
-        sudo -E apt install -y libncurses-dev flex bison libssl-dev git gcc-aarch64-linux-gnu fakeroot build-essential ncurses-dev xz-utils libssl-dev bc flex libelf-dev bison
-        git clone --depth=1 https://github.com/yjxch/build_catdrive_kernel_5.4.git
-        cd build_catdrive_kernel_5.4
-        mkdir output
-        make
+          sudo -E apt update
+          sudo -E apt install -y wget xz-utils make gcc flex bison dpkg-dev bc rsync kmod cpio libssl-dev
+          sudo -E apt install -y libncurses-dev flex bison libssl-dev git gcc-aarch64-linux-gnu fakeroot build-essential ncurses-dev xz-utils libssl-dev bc flex libelf-dev bison
+          git clone --depth=1 https://github.com/yjxch/build_catdrive_kernel_5.4.git
+          cd build_catdrive_kernel_5.4
+          mkdir output
+          make
 
       - name: Artifact
         uses: actions/upload-artifact@v3
